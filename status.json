@@ -1,6 +1,6 @@
 {
   "task": "Create a file named hello.py in the src folder that prints success",
-  "iteration": 3,
+  "iteration": 4,
   "commands_run": [
     {
       "iteration": 1,
@@ -13,9 +13,15 @@
       "command": "ls -R",
       "timestamp": 1790440373.037343,
       "exit_code": 0
+    },
+    {
+      "iteration": 3,
+      "command": "cat << 'EOF' > /tmp/patch.diff\n--- /dev/null\n+++ b/src/hello.py\n@@\n+#!/usr/bin/env python3\n+print(\"success\")\n+\nEOF\npatch -p0 < /tmp/patch.diff",
+      "timestamp": 1790440373.851753,
+      "exit_code": 2
     }
   ],
-  "rollback_count": 1,
+  "rollback_count": 2,
   "state": "running",
-  "tokens": 2075
+  "tokens": 2920
 }
