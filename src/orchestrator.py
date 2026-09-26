@@ -28,7 +28,15 @@ Verify changes via bash, then output: <status>TASK_COMPLETE</status>"""
 class Orchestrator:
     def __init__(self, config: Config):
         self.config = config
-        self.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.repo_root = os.path.abspath(config.target_repo)
+        
+        if not os.path.isdir(self.repo_root):
+            logging.error(f"Target repo {self.repo_root} does not exist.")
+            import sys; sys.exit(1)
+        if not os.path.isdir(os.path.join(self.repo_root, ".git")):
+            logging.error(f"Target repo {self.repo_root} is not a git repository.")
+            import sys; sys.exit(1)
+            
         self.llm = LLMClient(config)
         self.evidence = Evidence(self.repo_root)
         self.audit = AuditLog(self.repo_root)
@@ -290,6 +298,7 @@ class Orchestrator:
                     
                     tool_call_dict = {"id": tool_call.id, "type": "function", "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments}}
                     self.context.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
+                    self.evidence.status["tools_called"] = self.evidence.status.get("tools_called", 0) + 1
                     
                     is_modifying = any(kw in cmd for kw in ["patch", ">", "rm ", "touch ", "sed "])
                     if is_modifying:
@@ -298,10 +307,16 @@ class Orchestrator:
                     
                     logging.info(f"Executing: {cmd}")
                     cmd_log = {"iteration": iteration, "command": cmd, "timestamp": time.time()}
-                    result = run_sandboxed(cmd, cwd, self.config.timeout_seconds, self.config.mem_limit_mb)
+                    result = run_sandboxed(cmd, cwd, self.config.timeout_seconds, self.config.mem_limit_mb, self.repo_root)
                     exit_code = result["exit_code"]
                     
                     cmd_log["exit_code"] = exit_code
+                    
+                    if "pytest" in cmd or "make test" in cmd or "npm test" in cmd:
+                        self.evidence.status["tests_run"] = self.evidence.status.get("tests_run", 0) + 1
+                        if exit_code == 0:
+                            self.evidence.status["tests_passed"] = self.evidence.status.get("tests_passed", 0) + 1
+                            
                     self.evidence.status["commands_run"].append(cmd_log)
                     self.evidence.write_status()
                     
@@ -330,6 +345,7 @@ class Orchestrator:
                             if not syntax_failed:
                                 num_files = len(changed_files)
                                 changed_lines = len([line for line in diff_output.splitlines() if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---"))])
+                                self.evidence.status["files_changed"] = self.evidence.status.get("files_changed", 0) + num_files
                             
                             if num_files > 1 or changed_lines > 15 or is_retry:
                                 logging.info("Triggering post-patch self-critique...")

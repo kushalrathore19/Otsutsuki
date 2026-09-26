@@ -18,7 +18,7 @@ def set_limits(mem_limit_mb: int):
     except Exception as e:
         logging.warning(f"Failed to set RLIMIT_NPROC sandbox limit: {e}")
 
-def check_paths(cmd: str, cwd: str) -> tuple[bool, str]:
+def check_paths(cmd: str, cwd: str, target_repo: str = None) -> tuple[bool, str]:
     try:
         parts = shlex.split(cmd)
     except Exception:
@@ -35,13 +35,13 @@ def check_paths(cmd: str, cwd: str) -> tuple[bool, str]:
             if any(part.startswith(p) for p in ["/tmp/", "/dev/null", "/bin/", "/usr/bin/"]):
                 continue
             resolved = os.path.abspath(os.path.join(cwd, part))
-            cwd_real = os.path.abspath(cwd)
+            cwd_real = os.path.abspath(target_repo) if target_repo else os.path.abspath(cwd)
             if not resolved.startswith(cwd_real):
                 return False, f"Error: Security violation - Path '{part}' resolves outside the repository root."
     return True, ""
 
-def run_sandboxed(cmd: str, cwd: str, timeout: int, mem_limit_mb: int) -> dict:
-    is_valid, err_msg = check_paths(cmd, cwd)
+def run_sandboxed(cmd: str, cwd: str, timeout: int, mem_limit_mb: int, target_repo: str = None) -> dict:
+    is_valid, err_msg = check_paths(cmd, cwd, target_repo)
     if not is_valid:
         return {"exit_code": 1, "stdout": "", "stderr": err_msg}
     safe_env = os.environ.copy()

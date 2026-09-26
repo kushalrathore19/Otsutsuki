@@ -1,6 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll, Horizontal, Vertical
-from textual.widgets import Header, Footer, Static, Markdown, Input, Collapsible, Label, TextArea
+from textual.widgets import Header, Footer, Static, Markdown, Input, Collapsible, Label, TextArea, ProgressBar
 from textual.binding import Binding
 from textual import work
 from rich.syntax import Syntax
@@ -62,6 +62,21 @@ class ChatMessage(Static):
 
 class MissionControl(App):
     CSS = """
+    #app_layout {
+        width: 100%;
+        height: 100%;
+    }
+    #main_area {
+        width: 72%;
+        height: 100%;
+        border-right: solid $primary;
+    }
+    #metrics_panel {
+        width: 28%;
+        height: 100%;
+        padding: 1 2;
+        background: $panel;
+    }
     #transcript {
         height: 1fr;
         overflow-y: auto;
@@ -161,13 +176,19 @@ class MissionControl(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield VerticalScroll(id="transcript")
-        with Vertical(id="bottom_bar"):
-            yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
-            yield Static("", id="sys_status", markup=True)
-            yield Static("Enter to send", id="input_hint")
-            yield Static("❯ ", id="input_prompt")
-            yield Input(id="input_box", placeholder="Type a task, or / for commands")
+        with Horizontal(id="app_layout"):
+            with Vertical(id="main_area"):
+                yield VerticalScroll(id="transcript")
+                with Vertical(id="bottom_bar"):
+                    yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
+                    yield Static("", id="sys_status", markup=True)
+                    yield Static("Enter to send", id="input_hint")
+                    yield Static("❯ ", id="input_prompt")
+                    yield Input(id="input_box", placeholder="Type a task, or / for commands")
+            with Vertical(id="metrics_panel"):
+                yield Label("Metrics Dashboard", id="metrics_header", classes="role-label")
+                yield ProgressBar(id="metrics_progress", total=self.orchestrator.config.iteration_cap, show_eta=False)
+                yield Static("", id="metrics_table", markup=True)
         
     def on_mount(self):
         self.set_interval(0.1, self.update_logs)
@@ -235,6 +256,53 @@ class MissionControl(App):
         tokens = st.get("tokens", 0)
         cost = (tokens / 1_000_000) * 0.20
         self.query_one("#status_bar", Static).update(f"Role: {self.current_role} | Iteration: {iterations} | Tokens: {tokens} | Cost: ${cost:.6f}")
+        
+        try:
+            pb = self.query_one("#metrics_progress", ProgressBar)
+            pb.progress = iterations
+            
+            task_str = self.harness_task or st.get("task", "")
+            if len(task_str) > 50:
+                task_str = task_str[:47] + "..."
+            
+            repo_path = self.orchestrator.repo_root
+            if len(repo_path) > 40:
+                repo_path = "..." + repo_path[-37:]
+                
+            elapsed = time.time() - st.get("start_time", time.time())
+            mins, secs = divmod(int(elapsed), 60)
+            elapsed_str = f"{mins:02d}:{secs:02d}"
+            
+            critique_fired = 0
+            critique_skipped = 0
+            for ce in st.get("critique_events", []):
+                if ce.get("action") == "fire":
+                    critique_fired += 1
+                elif ce.get("action") == "skip":
+                    critique_skipped += 1
+                    
+            table = f"""[bold green]Target Repo:[/bold green]
+{repo_path}
+
+[bold green]Current Task:[/bold green]
+{task_str}
+
+[bold green]Agent Status:[/bold green]
+{self.current_role} (Iter: {iterations})
+Mode: {st.get('mode', 'normal')}
+
+[bold green]Evaluation Matrix[/bold green]
+Tokens: {tokens} / {self.orchestrator.config.token_budget}
+Cost: ${cost:.4f}
+Tools Called: {st.get('tools_called', 0)}
+Files Changed: {st.get('files_changed', 0)}
+Tests Run: {st.get('tests_run', 0)} (Passed: {st.get('tests_passed', 0)})
+Critique: {critique_fired} fired, {critique_skipped} skipped
+Rollbacks: {st.get('rollback_count', 0)}
+Elapsed: {elapsed_str}"""
+            self.query_one("#metrics_table", Static).update(table)
+        except Exception:
+            pass
 
     def add_block(self, role, content, is_error=False, markup=False):
         label = None

@@ -15,6 +15,7 @@ class Config:
     token_budget: int
     surgical_fraction: float
     finalize_fraction: float
+    target_repo: str
 
     @classmethod
     def load(cls) -> "Config":
@@ -77,5 +78,6 @@ class Config:
             multi_agent=os.environ.get("MULTI_AGENT", "0") == "1",
             token_budget=int(os.environ.get("TOKEN_BUDGET", 50000)),
             surgical_fraction=float(os.environ.get("SURGICAL_FRACTION", 0.7)),
-            finalize_fraction=float(os.environ.get("FINALIZE_FRACTION", 0.9))
+            finalize_fraction=float(os.environ.get("FINALIZE_FRACTION", 0.9)),
+            target_repo=os.environ.get("TARGET_REPO", repo_root)
         )

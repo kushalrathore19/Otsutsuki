@@ -1,6 +1,7 @@
 import os
 import json
 import threading
+import time
 
 class Evidence:
     def __init__(self, repo_root: str):
@@ -12,7 +13,13 @@ class Evidence:
             "commands_run": [],
             "rollback_count": 0,
             "state": "running",
-            "tokens": 0
+            "tokens": 0,
+            "tools_called": 0,
+            "files_changed": 0,
+            "tests_run": 0,
+            "tests_passed": 0,
+            "mode": "normal",
+            "start_time": time.time()
         }
         
     def write_task(self, task: str):

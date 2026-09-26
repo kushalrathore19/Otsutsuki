@@ -6,6 +6,7 @@ setup:
 	./.venv/bin/pip install openai textual pytest
 
 run:
+	@echo "Note: Use TARGET_REPO=/path/to/repo make run to operate on a different repository."
 	TASK="$${TASK:-Create a file named hello.txt containing the word success}" ./.venv/bin/python src/main.py
 
 test:
