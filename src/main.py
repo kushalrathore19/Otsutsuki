@@ -1,15 +1,12 @@
 import os
 import sys
+from config import Config
 from orchestrator import Orchestrator
 
 def main():
-    api_key = os.environ.get("AI_API_KEY")
-    if not api_key:
-        print("Error: AI_API_KEY environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
-    
     try:
-        orchestrator = Orchestrator()
+        config = Config.load()
+        orchestrator = Orchestrator(config)
         
         task = None
         if len(sys.argv) > 1:
@@ -31,6 +28,8 @@ def main():
         from tui import MissionControl
         app = MissionControl(orchestrator, task=task)
         app.run()
+    except SystemExit as e:
+        sys.exit(e.code)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

@@ -107,15 +107,8 @@ class MissionControl(App):
         self.intercept_result = None
         
         self.log_queue = []
-        self.original_stdout = sys.stdout
-        sys.stdout = self
-        
-    def write(self, s):
-        self.log_queue.append(s)
-        self.original_stdout.write(s)
-        
-    def flush(self):
-        self.original_stdout.flush()
+        from logging_setup import setup_logging
+        setup_logging(self.log_queue)
 
     def compose(self) -> ComposeResult:
         yield Header()
