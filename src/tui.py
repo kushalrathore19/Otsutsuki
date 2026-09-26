@@ -154,23 +154,20 @@ class MissionControl(App):
         yield VerticalScroll(id="transcript")
         with Vertical(id="bottom_bar"):
             yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
-            yield Static("Enter to send · Shift+Enter for newline", id="input_hint")
+            yield Static("Enter to send", id="input_hint")
             yield Static("❯ ", id="input_prompt")
-            ta = TextArea(id="input_box", show_line_numbers=False)
-            ta.styles.height = "auto"
-            ta.styles.max_height = "30%"
-            yield ta
+            yield Input(id="input_box", placeholder="Type a task, or / for commands")
         
     def on_mount(self):
         self.set_interval(0.1, self.update_logs)
         self.set_interval(0.5, self.update_status)
         
-        inp = self.query_one("#input_box", TextArea)
+        inp = self.query_one("#input_box", Input)
         if self.harness_task:
             if os.environ.get("AUTO_APPROVE") == "1":
                 self.run_orchestrator()
             else:
-                inp.text = self.harness_task
+                inp.value = self.harness_task
                 
         inp.focus()
 
@@ -287,19 +284,12 @@ class MissionControl(App):
         self.intercept_event.wait()
         return self.intercept_result
 
-    def on_key(self, event):
-        if event.key == "shift+enter":
-            return  # let TextArea handle it — inserts a newline
-        if event.key == "enter":
-            ta = self.query_one("#input_box", TextArea)
-            if ta.has_focus:
-                event.stop()
-                event.prevent_default()
-                val = ta.text.strip()
-                if not val:
-                    return
-                ta.text = ""
-                self.handle_input_submission(val)
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        val = event.value.strip()
+        event.input.value = ""
+        if not val:
+            return
+        self.handle_input_submission(val)
 
     def handle_input_submission(self, val):
         if val == "/quit":
