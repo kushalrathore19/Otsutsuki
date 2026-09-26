@@ -1,8 +1,8 @@
 {
-  "task": "Create a file named hello.py in the src folder that prints success",
-  "iteration": 8,
+  "task": "",
+  "iteration": 0,
   "commands_run": [],
-  "rollback_count": 7,
-  "state": "running",
-  "tokens": 4500
+  "rollback_count": 0,
+  "state": "interrupted",
+  "tokens": 0
 }
