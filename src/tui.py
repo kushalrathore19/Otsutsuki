@@ -37,12 +37,13 @@ class ChatMessage(Static):
                     body = self.msg_content[1]
                 else:
                     body = self.msg_content
+                self._current_text = str(body)
                     
                 with Collapsible(title=title, collapsed=True):
                     if self.msg_role == "diff":
-                        yield Static(Syntax(body, "diff", theme="monokai", word_wrap=True))
+                        yield Static(Syntax(self._current_text, "diff", theme="monokai", word_wrap=True))
                     else:
-                        self.body_static = Static(body)
+                        self.body_static = Static(self._current_text)
                         yield self.body_static
             else:
                 if getattr(self, "use_markup", False) and isinstance(self.msg_content, str):
@@ -53,9 +54,9 @@ class ChatMessage(Static):
                     yield Static(self.msg_content)
 
     def append_text(self, text):
-        if self.body_static:
-            old = self.body_static.renderable
-            self.body_static.update(f"{old}\n{text}")
+        if self.body_static and hasattr(self, "_current_text"):
+            self._current_text += f"\n{text}"
+            self.body_static.update(self._current_text)
             if "Exit Code:" in text and "Exit Code: 0" not in text:
                 self.add_class("error")
 
