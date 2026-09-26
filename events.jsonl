@@ -225,3 +225,5 @@
 {"timestamp": 1790465022.946325, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790465023.889056, "event": "critique_fired", "decision": "pass"}
 {"timestamp": 1790465024.409728, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790465024.528874, "event": "critique_skipped"}
+{"timestamp": 1790465025.238251, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
