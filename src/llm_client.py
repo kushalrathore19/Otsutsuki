@@ -31,7 +31,13 @@ class LLMClient:
                 if retries >= max_retries:
                     logging.error(f"Max retries reached for LLM call: {e}")
                     raise LLMClientError(f"Max retries reached: {e}") from e
+                
                 delay = base_delay * (2 ** retries) + random.uniform(0, 1)
+                if isinstance(e, RateLimitError):
+                    match = re.search(r"try again in ([\d.]+)s", str(e))
+                    if match:
+                        delay = float(match.group(1)) + 0.1
+                
                 logging.warning(f"Transient LLM error ({e}), retrying in {delay:.2f}s...")
                 time.sleep(delay)
                 retries += 1
@@ -51,7 +57,8 @@ class LLMClient:
             response = self._retry_call(
                 self.client.chat.completions.create,
                 model=self.config.model,
-                messages=messages
+                messages=messages,
+                max_tokens=256
             )
             if response.usage:
                 self.usage_tokens += response.usage.total_tokens
@@ -79,7 +86,8 @@ class LLMClient:
                 self.client.chat.completions.create,
                 model=self.config.model,
                 messages=messages,
-                temperature=0.1
+                temperature=0.1,
+                max_tokens=256
             )
             if response.usage:
                 self.usage_tokens += response.usage.total_tokens
@@ -98,7 +106,8 @@ class LLMClient:
             self.client.chat.completions.create,
             model=self.config.model,
             messages=messages,
-            tools=tools
+            tools=tools,
+            max_tokens=1024
         )
         if response.usage:
             self.usage_tokens += response.usage.total_tokens

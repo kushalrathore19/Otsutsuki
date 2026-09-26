@@ -11,26 +11,19 @@ from audit import AuditLog
 from exceptions import HarnessError, PatchApplyError, RollbackError
 from context_manager import ContextManager
 
-SYSTEM_PROMPT = """You are a Proof-First AI Coding Harness agent.
-You have exactly one tool available: `run_bash`.
-You must navigate the repository yourself using `grep`, `find`, `cat`.
-For modifying code or creating repository files, you MUST write a unified diff to `/tmp/patch.diff` AND apply it immediately using `patch` in the VERY SAME COMMAND.
-Example:
+SYSTEM_PROMPT = """You are an AI agent. Tool: `run_bash`.
+To modify/create files, write a unified diff to `/tmp/patch.diff` AND apply with `patch` in ONE command.
+Ex:
 cat << 'EOF' > /tmp/patch.diff
 --- /dev/null
-+++ b/hello.txt
++++ b/file
 @@ -0,0 +1 @@
-+success
++A
 EOF
 patch -p0 < /tmp/patch.diff
 
-Never attempt to overwrite files inline or use custom editors.
-When inspecting a file before writing a patch, use `cat -n <file>` (not plain `cat`) so you have accurate line numbers for the unified diff. Patches with incorrect line numbers will fail to apply and waste an iteration.
-
-After you have completed the requested changes, you MUST explicitly verify them using a bash command (for example, `cat hello.txt` to verify contents).
-Once verified and successful, you MUST output the exact tag: <status>TASK_COMPLETE</status>
-Your goal is to solve the given task using bash commands.
-"""
+No custom editors. Use `cat -n <file>` for exact line numbers for patches.
+Verify changes via bash, then output: <status>TASK_COMPLETE</status>"""
 
 class Orchestrator:
     def __init__(self, config: Config):
