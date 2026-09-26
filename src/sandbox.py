@@ -1,6 +1,9 @@
 import os
 import subprocess
 import resource
+import logging
+import shlex
+from exceptions import SandboxError
 
 def set_limits(mem_limit_mb: int):
     try:
@@ -8,43 +11,44 @@ def set_limits(mem_limit_mb: int):
         resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
         if hasattr(resource, 'RLIMIT_NPROC'):
             resource.setrlimit(resource.RLIMIT_NPROC, (256, 256))
+    except Exception as e:
+        logging.warning(f"Failed to set sandbox limits: {e}")
+        raise SandboxError(f"Failed to set sandbox limits: {e}") from e
+
+def check_paths(cmd: str, cwd: str) -> tuple[bool, str]:
+    try:
+        parts = shlex.split(cmd)
     except Exception:
-        pass
+        parts = cmd.split()
+    for part in parts:
+        if "=" in part:
+            part = part.split("=", 1)[1]
+        if part.startswith("/") or "../" in part:
+            if any(part.startswith(p) for p in ["/tmp/", "/dev/null", "/bin/", "/usr/bin/"]):
+                continue
+            resolved = os.path.abspath(os.path.join(cwd, part))
+            cwd_real = os.path.abspath(cwd)
+            if not resolved.startswith(cwd_real):
+                return False, f"Error: Security violation - Path '{part}' resolves outside the repository root."
+    return True, ""
 
 def run_sandboxed(cmd: str, cwd: str, timeout: int, mem_limit_mb: int) -> dict:
+    is_valid, err_msg = check_paths(cmd, cwd)
+    if not is_valid:
+        return {"exit_code": 1, "stdout": "", "stderr": err_msg}
     safe_env = os.environ.copy()
     if "AI_API_KEY" in safe_env:
         del safe_env["AI_API_KEY"]
-        
-    # Note: strict path-confinement enforcement is a known gap, not currently implemented.
     if subprocess.run("unshare --net true", shell=True, capture_output=True).returncode == 0:
         cmd = f"unshare --net {cmd}"
-        
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
-            cwd=cwd,
-            env=safe_env,
-            preexec_fn=lambda: set_limits(mem_limit_mb),
-            timeout=timeout,
-            capture_output=True,
-            text=True
+            cmd, shell=True, cwd=cwd, env=safe_env,
+            preexec_fn=lambda: set_limits(mem_limit_mb), timeout=timeout, capture_output=True, text=True
         )
-        return {
-            "exit_code": result.returncode,
-            "stdout": result.stdout if result.stdout else "",
-            "stderr": result.stderr if result.stderr else ""
-        }
+        return {"exit_code": result.returncode, "stdout": result.stdout if result.stdout else "", "stderr": result.stderr if result.stderr else ""}
     except subprocess.TimeoutExpired as e:
-        return {
-            "exit_code": 124,
-            "stdout": e.stdout if e.stdout else "",
-            "stderr": f"Command timed out after {timeout} seconds"
-        }
+        return {"exit_code": 124, "stdout": e.stdout if e.stdout else "", "stderr": f"Command timed out after {timeout} seconds"}
     except Exception as e:
-        return {
-            "exit_code": -1,
-            "stdout": "",
-            "stderr": str(e)
-        }
+        logging.error(f"Sandbox execution error: {e}")
+        raise SandboxError(f"Sandbox execution error: {e}") from e
