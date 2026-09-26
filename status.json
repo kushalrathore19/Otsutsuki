@@ -1,6 +1,6 @@
 {
   "task": "Create a file named hello.txt containing the word success",
-  "iteration": 4,
+  "iteration": 5,
   "commands_run": [
     {
       "iteration": 1,
@@ -19,9 +19,15 @@
       "command": "printf '%s\n' '--- /dev/null' '+++ b/hello.txt' '@@' '+success' > /tmp/patch.diff && patch -p0 < /tmp/patch.diff",
       "timestamp": 1790459674.578094,
       "exit_code": 128
+    },
+    {
+      "iteration": 4,
+      "command": "cat <<'EOF' > /tmp/patch.diff\n--- /dev/null\n+++ b/hello.txt\n@@\n+success\nEOF\npatch -p0 < /tmp/patch.diff",
+      "timestamp": 1790459675.3803399,
+      "exit_code": 128
     }
   ],
-  "rollback_count": 3,
+  "rollback_count": 4,
   "state": "running",
-  "tokens": 3833
+  "tokens": 4749
 }
