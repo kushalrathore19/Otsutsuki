@@ -49,8 +49,10 @@ class Orchestrator:
             "iteration": 0,
             "commands_run": [],
             "rollback_count": 0,
-            "state": "running"
+            "state": "running",
+            "tokens": 0
         }
+        self.nudge_queue = []
 
     def _write_status(self):
         with open(os.path.join(self.repo_root, "status.json"), "w") as f:
@@ -123,8 +125,19 @@ class Orchestrator:
         self.status["task"] = task
         self._write_status()
         
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+        style_path = os.path.join(self.repo_root, "agent_style.json")
+        system_content = SYSTEM_PROMPT
+        if os.path.exists(style_path):
+            try:
+                with open(style_path, "r") as f:
+                    style_data = json.load(f)
+                    system_content += "\n\nAdditional Coding Style and Context:\n"
+                    system_content += json.dumps(style_data, indent=2)
+            except Exception as e:
+                print(f"Error parsing agent_style.json: {e}")
+                
+        self.messages = [
+            {"role": "system", "content": system_content},
             {"role": "user", "content": task}
         ]
         
@@ -155,6 +168,10 @@ class Orchestrator:
         
         try:
             while iteration < max_iterations:
+                while self.nudge_queue:
+                    hint = self.nudge_queue.pop(0)
+                    self.messages.append({"role": "user", "content": f"User nudge: {hint}"})
+                    
                 iteration += 1
                 self.status["iteration"] = iteration
                 self._write_status()
@@ -162,9 +179,13 @@ class Orchestrator:
                 
                 response = self.client.chat.completions.create(
                     model="openai/gpt-oss-20b",
-                    messages=messages,
+                    messages=self.messages,
                     tools=tools
                 )
+                
+                if response.usage:
+                    self.status["tokens"] += response.usage.total_tokens
+                    self._write_status()
                 
                 message = response.choices[0].message
                 content = message.content or ""
@@ -187,8 +208,8 @@ class Orchestrator:
                 
                 if not message.tool_calls:
                     if "<status>TASK_COMPLETE</status>" not in content:
-                        messages.append({"role": "assistant", "content": content})
-                        messages.append({"role": "user", "content": "Please continue to verify and output <status>TASK_COMPLETE</status> when done, or use the run_bash tool."})
+                        self.messages.append({"role": "assistant", "content": content})
+                        self.messages.append({"role": "user", "content": "Please continue to verify and output <status>TASK_COMPLETE</status> when done, or use the run_bash tool."})
                     continue
                     
                 tool_call = message.tool_calls[0]
@@ -228,8 +249,8 @@ class Orchestrator:
                                 "arguments": tool_call.function.arguments
                             }
                         }
-                        messages.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
-                        messages.append({
+                        self.messages.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
+                        self.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
                             "name": "run_bash",
@@ -242,7 +263,7 @@ class Orchestrator:
                             self.rollback()
                             
                         distilled_msg = self.distill_logs(exit_code, result["stdout"], result["stderr"])
-                        messages.append({
+                        self.messages.append({
                             "role": "user",
                             "content": f"Attempt failed when running `{cmd}`.\n{distilled_msg}\nPlease fix the error and try again."
                         })

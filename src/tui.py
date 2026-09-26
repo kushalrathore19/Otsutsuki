@@ -1,9 +1,10 @@
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Header, Footer, ProgressBar, TabbedContent, TabPane, RichLog, Static, Button, Markdown, ListView, ListItem
+from textual.widgets import Header, Footer, ProgressBar, TabbedContent, TabPane, RichLog, Static, Button, Markdown, ListView, ListItem, Input
 from textual.binding import Binding
 from textual.screen import ModalScreen
 from textual import work
+from rich.syntax import Syntax
 import sys
 import os
 import threading
@@ -12,32 +13,59 @@ class ConfirmModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Static("CONFIRM COMMIT\n\nTask verified. Ready to commit?", id="message")
+            yield Static(id="modal_diff_view", classes="diff_container")
             with Horizontal():
                 yield Button("Commit", id="commit", variant="success")
                 yield Button("Rollback", id="rollback", variant="error")
 
+    def on_mount(self):
+        patch_path = "/tmp/patch.diff"
+        if os.path.exists(patch_path):
+            with open(patch_path, "r") as f:
+                self.query_one("#modal_diff_view", Static).update(Syntax(f.read(), "diff", theme="monokai", word_wrap=True))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "commit":
             self.dismiss(True)
-        else:
+        elif event.button.id == "rollback":
             self.dismiss(False)
+
+class NudgeModal(ModalScreen):
+    def compose(self) -> ComposeResult:
+        with Vertical(id="nudge_dialog"):
+            yield Static("Course-Correct (Nudge Agent)", classes="modal_title")
+            yield Input(placeholder="Enter hint for the agent...", id="nudge_input")
+            with Horizontal():
+                yield Button("Send", id="send_nudge", variant="success")
+                yield Button("Cancel", id="cancel_nudge", variant="error")
+                
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "send_nudge":
+            hint = self.query_one("#nudge_input", Input).value
+            self.dismiss(hint)
+        else:
+            self.dismiss(None)
 
 class MissionControl(App):
     CSS = """
     #left_pane { width: 30%; height: 100%; border-right: solid green; }
     #right_pane { width: 70%; height: 100%; }
-    #dialog {
+    #dialog, #nudge_dialog {
         padding: 1 2;
         border: thick $background 80%;
         background: $surface;
-        width: 60;
-        height: 15;
+        width: 80%;
+        height: 80%;
         align: center middle;
     }
+    #nudge_dialog { height: auto; }
+    .diff_container { height: 1fr; overflow-y: auto; margin-bottom: 1; }
+    #odometer { padding-left: 2; padding-right: 2; background: $boost; color: $text; }
     """
     
     BINDINGS = [
         Binding("r", "rollback", "Manual Rollback"),
+        Binding("ctrl+n", "nudge", "Nudge Agent"),
         Binding("q", "quit", "Quit")
     ]
     
@@ -78,7 +106,7 @@ class MissionControl(App):
                     with TabPane("Live Log", id="log_tab"):
                         yield RichLog(id="live_log", highlight=True, markup=True)
                     with TabPane("Diff", id="diff_tab"):
-                        yield Markdown("No diff yet", id="diff_view")
+                        yield Static("No diff yet", id="diff_view", classes="diff_container")
                     with TabPane("Test Output", id="test_tab"):
                         yield RichLog(id="test_log")
                     with TabPane("Artifacts", id="artifacts_tab"):
@@ -87,6 +115,7 @@ class MissionControl(App):
                             yield Button("status.json", id="btn_status")
                             yield Button("OUTCOME.md", id="btn_outcome")
                         yield Markdown("", id="artifact_view")
+        yield Static("Tokens: 0 | Cost: $0.000000", id="odometer")
         yield Footer()
         
     def on_mount(self):
@@ -105,11 +134,18 @@ class MissionControl(App):
         pb = self.query_one("#progress", ProgressBar)
         pb.progress = self.orchestrator.status.get("iteration", 0)
         
+        # Token odometer
+        tokens = self.orchestrator.status.get("tokens", 0)
+        cost = (tokens / 1_000_000) * 0.20
+        self.query_one("#odometer", Static).update(f"Tokens: {tokens} | Cost: ${cost:.6f}")
+        
+        # Diff update
         patch_path = "/tmp/patch.diff"
         if os.path.exists(patch_path):
             with open(patch_path, "r") as f:
-                diff_view = self.query_one("#diff_view", Markdown)
-                diff_view.update(f"```diff\n{f.read()}\n```")
+                content = f.read()
+                diff_view = self.query_one("#diff_view", Static)
+                diff_view.update(Syntax(content, "diff", theme="monokai", word_wrap=True))
 
     @work(thread=True)
     def run_orchestrator(self):
@@ -135,6 +171,13 @@ class MissionControl(App):
     def action_rollback(self):
         self.orchestrator.rollback()
         self.query_one("#live_log", RichLog).write("[bold red]Manual Rollback Triggered via TUI[/bold red]")
+        
+    def action_nudge(self):
+        def check_nudge(hint):
+            if hint:
+                self.orchestrator.nudge_queue.append(hint)
+                self.query_one("#live_log", RichLog).write(f"[bold cyan]Nudge injected: {hint}[/bold cyan]")
+        self.push_screen(NudgeModal(), check_nudge)
         
     def on_button_pressed(self, event: Button.Pressed):
         artifact_view = self.query_one("#artifact_view", Markdown)
