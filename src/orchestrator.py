@@ -172,8 +172,17 @@ class Orchestrator:
                     print("Model response:", content)
                     if "<status>TASK_COMPLETE</status>" in content:
                         print("Task completed successfully!")
-                        outcome = "Success"
-                        self.status["state"] = "complete"
+                        commit = True
+                        if hasattr(self, 'confirm_callback'):
+                            commit = self.confirm_callback()
+                            
+                        if commit:
+                            outcome = "Success"
+                            self.status["state"] = "complete"
+                        else:
+                            outcome = "Failed"
+                            self.status["state"] = "rolled_back"
+                            self.rollback()
                         break
                 
                 if not message.tool_calls:

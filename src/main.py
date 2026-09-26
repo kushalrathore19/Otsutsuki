@@ -8,12 +8,14 @@ def main():
         print("Error: AI_API_KEY environment variable is not set.", file=sys.stderr)
         sys.exit(1)
     
-    print("Harness Initialized")
-    
     try:
         orchestrator = Orchestrator()
         task = "Create a file named hello.txt containing the word success"
-        orchestrator.run_task(task)
+        
+        # Boot directly into Textual TUI
+        from tui import MissionControl
+        app = MissionControl(orchestrator, task=task)
+        app.run()
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
