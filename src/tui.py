@@ -9,6 +9,7 @@ import os
 import threading
 import json
 import time
+import re
 
 class ChatMessage(Static):
     def __init__(self, role: str, content, role_label=None, is_error=False, markup=False, **kwargs):

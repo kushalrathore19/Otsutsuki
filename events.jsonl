@@ -100,3 +100,14 @@
 {"timestamp": 1790459033.06658, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790459034.506316, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790459035.278136, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790459036.2776608, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790459103.668465, "event": "task_started", "task": "do it"}
+{"timestamp": 1790459103.6690948, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790459103.669536, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790459103.669704, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790459103.671083, "event": "task_started", "task": "do it"}
+{"timestamp": 1790459103.6716821, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790459103.672168, "event": "critique_skipped"}
+{"timestamp": 1790459103.672332, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790459465.358262, "event": "task_started", "task": "Create a file named hello.txt containing the word success"}
+{"timestamp": 1790459466.6907241, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
