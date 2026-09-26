@@ -180,13 +180,61 @@ class Orchestrator:
         self.evidence.status["tokens"] = self.llm.usage_tokens
         return self.evidence.status
 
-    def run_task(self, task: str):
-        logging.info(f"Starting task: {task}")
-        critique = self.llm.critique(task)
-        if critique and hasattr(self, 'intercept_callback'):
-            task = self.intercept_callback(critique, task)
-        self.evidence.write_task(task)
+    def enrich_task_with_github(self, task: str) -> str:
+        import re
+        import urllib.request
+        import json
         
+        match = re.search(r'https://github\.com/([^/]+)/([^/]+)/(?:issues|pull)/(\d+)', task)
+        if not match:
+            return task
+            
+        owner, repo, issue_num = match.groups()
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_num}"
+        
+        try:
+            req = urllib.request.Request(api_url)
+            if "GITHUB_TOKEN" in os.environ:
+                req.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
+            req.add_header("User-Agent", "Otsutsuki-Harness")
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode())
+                    title = data.get("title", "")
+                    body = data.get("body", "")
+                    
+                    enrichment = f"\n\n--- GitHub Issue #{issue_num}: {title} ---\n{body}\n------------------------\n"
+                    
+                    comments_url = data.get("comments_url")
+                    if comments_url:
+                        try:
+                            creq = urllib.request.Request(comments_url)
+                            if "GITHUB_TOKEN" in os.environ:
+                                creq.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
+                            creq.add_header("User-Agent", "Otsutsuki-Harness")
+                            with urllib.request.urlopen(creq, timeout=10) as cresp:
+                                if cresp.status == 200:
+                                    cdata = json.loads(cresp.read().decode())
+                                    if cdata:
+                                        enrichment += "Comments:\n"
+                                        for c in cdata:
+                                            enrichment += f"- {c.get('user', {}).get('login', 'User')}: {c.get('body', '')}\n"
+                        except Exception as ce:
+                            logging.warning(f"Failed to fetch comments for issue #{issue_num}: {ce}")
+                            
+                    return task + enrichment
+        except Exception as e:
+            msg = f"Degradation: Failed to fetch GitHub issue #{issue_num}: {e}"
+            logging.warning(msg)
+            if "degradations" not in self.evidence.status:
+                self.evidence.status["degradations"] = []
+            self.evidence.status["degradations"].append(msg)
+            self.evidence.write_status()
+            
+        return task
+
+
     def _execute_subtask(self, task: str, iteration: int = 0, bypass_confirm: bool = False, cwd: str = None):
         cwd = cwd or self.repo_root
         style_path = os.path.join(self.repo_root, "agent_style.json")
@@ -400,6 +448,8 @@ class Orchestrator:
     def run_task(self, task: str):
         self.audit.log_event("task_started", {"task": task})
         logging.info(f"Starting task: {task}")
+        task = self.enrich_task_with_github(task)
+        
         critique = self.llm.critique(task)
         if critique and hasattr(self, 'intercept_callback'):
             task = self.intercept_callback(critique, task)
@@ -423,6 +473,8 @@ class Orchestrator:
 
     def run_multi_agent(self, task: str):
         self.audit.log_event("task_started", {"task": task})
+        task = self.enrich_task_with_github(task)
+        
         from architect import Architect
         from verifier import Verifier
         
