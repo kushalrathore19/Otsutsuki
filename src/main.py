@@ -29,8 +29,7 @@ def main():
                 with open(task_file, "r") as f:
                     task = f.read().strip()
         if not task:
-            print("Error: No task provided. Please provide a task via CLI argument, TASK environment variable, or a TASK_INPUT.md file in the repository root.", file=sys.stderr)
-            sys.exit(1)
+            task = ""
         from tui import MissionControl
         app = MissionControl(orchestrator, task=task)
         app.run()

@@ -9,11 +9,14 @@ def set_limits(mem_limit_mb: int):
     try:
         mem_limit = mem_limit_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
+    except Exception as e:
+        logging.warning(f"Failed to set RLIMIT_AS sandbox limit: {e}")
+        
+    try:
         if hasattr(resource, 'RLIMIT_NPROC'):
             resource.setrlimit(resource.RLIMIT_NPROC, (256, 256))
     except Exception as e:
-        logging.warning(f"Failed to set sandbox limits: {e}")
-        raise SandboxError(f"Failed to set sandbox limits: {e}") from e
+        logging.warning(f"Failed to set RLIMIT_NPROC sandbox limit: {e}")
 
 def check_paths(cmd: str, cwd: str) -> tuple[bool, str]:
     try:
@@ -23,6 +26,11 @@ def check_paths(cmd: str, cwd: str) -> tuple[bool, str]:
     for part in parts:
         if "=" in part:
             part = part.split("=", 1)[1]
+            
+        lower_part = part.lower()
+        if "secret" in lower_part or "credential" in lower_part or part in [".env", ".git/config", ".git/credentials"] or part.endswith("/.env") or part.endswith("/.git/config") or part.endswith("/.git/credentials"):
+            return False, f"Error: Security violation - Path '{part}' is a sensitive repository file."
+            
         if part.startswith("/") or "../" in part:
             if any(part.startswith(p) for p in ["/tmp/", "/dev/null", "/bin/", "/usr/bin/"]):
                 continue

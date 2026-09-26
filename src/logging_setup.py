@@ -5,11 +5,18 @@ class QueueHandler(logging.Handler):
     def __init__(self, log_queue):
         super().__init__()
         self.log_queue = log_queue
+        self.level_colors = {
+            logging.ERROR: "[red]ERROR[/red]",
+            logging.WARNING: "[yellow]WARN[/yellow]",
+            logging.INFO: "[dim]INFO[/dim]",
+            logging.DEBUG: "[dim]DEBUG[/dim]"
+        }
 
     def emit(self, record):
         try:
             msg = self.format(record)
-            self.log_queue.append(msg + "\n")
+            prefix = self.level_colors.get(record.levelno, f"[{record.levelname}]")
+            self.log_queue.append(f"{prefix} {msg}\n")
         except Exception:
             self.handleError(record)
 

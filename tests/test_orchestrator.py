@@ -8,7 +8,7 @@ from orchestrator import Orchestrator
 from config import Config
 
 def test_critique_triggers():
-    cfg = Config(api_key="test", model="test", base_url="test", iteration_cap=1, timeout_seconds=10, mem_limit_mb=1024, auto_approve=False)
+    cfg = Config(api_key="test", model="test", base_url="test", iteration_cap=1, timeout_seconds=10, mem_limit_mb=1024, auto_approve=False, multi_agent=False, token_budget=50000, surgical_fraction=0.7, finalize_fraction=0.9)
     
     with patch("orchestrator.LLMClient") as mock_llm_cls, \
          patch("orchestrator.run_sandboxed") as mock_run_sandboxed, \
@@ -48,7 +48,7 @@ def test_critique_triggers():
         mock_llm.post_patch_critique.assert_called_once()
         
 def test_critique_skips_trivial_patch():
-    cfg = Config(api_key="test", model="test", base_url="test", iteration_cap=1, timeout_seconds=10, mem_limit_mb=1024, auto_approve=False)
+    cfg = Config(api_key="test", model="test", base_url="test", iteration_cap=1, timeout_seconds=10, mem_limit_mb=1024, auto_approve=False, multi_agent=False, token_budget=50000, surgical_fraction=0.7, finalize_fraction=0.9)
     
     with patch("orchestrator.LLMClient") as mock_llm_cls, \
          patch("orchestrator.run_sandboxed") as mock_run_sandboxed, \
