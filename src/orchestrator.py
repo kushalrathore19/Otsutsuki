@@ -39,9 +39,11 @@ class Orchestrator:
         self.api_key = os.environ.get("AI_API_KEY")
         if not self.api_key:
             raise ValueError("AI_API_KEY environment variable is missing")
+        self.base_url = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1")
+        self.model = os.environ.get("AI_MODEL", "openai/gpt-oss-20b")
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url="https://api.groq.com/openai/v1"
+            base_url=self.base_url
         )
         self.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         self.status = {
@@ -60,7 +62,7 @@ class Orchestrator:
 
     def checkpoint(self):
         # Create a commit snapshot so we don't wipe the working tree like stash does on success
-        subprocess.run("git add -A && git commit -m 'harness_checkpoint'", shell=True, cwd=self.repo_root, capture_output=True)
+        subprocess.run("git add -A && git -c user.email=harness@example.com -c user.name=Harness commit -m 'harness_checkpoint' || true", shell=True, cwd=self.repo_root, capture_output=True)
 
     def rollback(self):
         self.status["rollback_count"] += 1
@@ -87,6 +89,11 @@ class Orchestrator:
         safe_env = os.environ.copy()
         if "AI_API_KEY" in safe_env:
             del safe_env["AI_API_KEY"]
+            
+        # Note: strict path-confinement enforcement is a known gap, not currently implemented.
+        if subprocess.run("unshare --net true", shell=True, capture_output=True).returncode == 0:
+            cmd = f"unshare --net {cmd}"
+            
         try:
             result = subprocess.run(
                 cmd,
@@ -123,7 +130,7 @@ class Orchestrator:
         ]
         try:
             response = self.client.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model=self.model,
                 messages=messages
             )
             if response.usage:
@@ -207,7 +214,7 @@ class Orchestrator:
                 print(f"\n--- Iteration {iteration} ---")
                 
                 response = self.client.chat.completions.create(
-                    model="openai/gpt-oss-20b",
+                    model=self.model,
                     messages=self.messages,
                     tools=tools
                 )
@@ -268,17 +275,18 @@ class Orchestrator:
                     if result['stdout']: print(f"Stdout:\n{result['stdout'][:500]}")
                     if result['stderr']: print(f"Stderr:\n{result['stderr'][:500]}")
                     
+                    tool_call_dict = {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    }
+                    self.messages.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
+                    
                     if exit_code == 0:
                         is_retry = False
-                        tool_call_dict = {
-                            "id": tool_call.id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_call.function.name,
-                                "arguments": tool_call.function.arguments
-                            }
-                        }
-                        self.messages.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
                         self.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
@@ -290,6 +298,10 @@ class Orchestrator:
                         print("Command failed! Pruning context and rolling back...")
                         if is_modifying:
                             self.rollback()
+                            
+                        # Pruning context: pop the assistant message containing the tool call
+                        if self.messages and self.messages[-1]["role"] == "assistant":
+                            self.messages.pop()
                             
                         distilled_msg = self.distill_logs(exit_code, result["stdout"], result["stderr"])
                         self.messages.append({

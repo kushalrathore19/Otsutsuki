@@ -9,7 +9,10 @@ run:
 	./.venv/bin/python src/main.py
 
 test:
-	@echo "Test suite not yet implemented"
+	@echo "Running initialization smoke test..."
+	AI_API_KEY=dummy_key_for_test ./.venv/bin/python -c "import sys; sys.path.insert(0, 'src'); from orchestrator import Orchestrator; Orchestrator(); print('Orchestrator initialized successfully')"
+	@echo "Running unit tests..."
+	./.venv/bin/python -m unittest discover -s . -p "test_*.py"
 
 clean:
 	rm -f status.json OUTCOME.md TASK.md

@@ -2,3 +2,7 @@
 .env
 __pycache__/
 *.pyc
+.DS_Store
+status.json
+OUTCOME.md
+TASK.md
