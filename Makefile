@@ -6,7 +6,7 @@ setup:
 	./.venv/bin/pip install openai textual
 
 run:
-	./.venv/bin/python src/main.py
+	TASK="$${TASK:-Create a file named hello.txt containing the word success}" ./.venv/bin/python src/main.py
 
 test:
 	@echo "Running initialization smoke test..."

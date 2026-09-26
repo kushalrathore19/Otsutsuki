@@ -1,1 +1,1 @@
-Create a file named hello.txt containing the word success
+Create a file named hello.py in the src folder that prints success
