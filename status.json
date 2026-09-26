@@ -1,8 +1,0 @@
-{
-  "task": "Create a file named hello.txt containing the word success",
-  "iteration": 1,
-  "commands_run": [],
-  "rollback_count": 0,
-  "state": "running",
-  "tokens": 775
-}
