@@ -1,5 +1,6 @@
 import time
 import json
+import random
 import re
 from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError, APIError, AuthenticationError
 import logging
@@ -11,14 +12,15 @@ class LLMClient:
         self.config = config
         self.client = OpenAI(
             api_key=config.api_key,
-            base_url=config.base_url
+            base_url=config.base_url,
+            max_retries=0
         )
         self.usage_tokens = 0
         
     def _retry_call(self, func, *args, **kwargs):
         retries = 0
         max_retries = 3
-        base_delay = 1.0
+        base_delay = 2.0
         while True:
             try:
                 return func(*args, **kwargs)
@@ -29,8 +31,8 @@ class LLMClient:
                 if retries >= max_retries:
                     logging.error(f"Max retries reached for LLM call: {e}")
                     raise LLMClientError(f"Max retries reached: {e}") from e
-                delay = base_delay * (2 ** retries)
-                logging.warning(f"Transient LLM error ({e}), retrying in {delay}s...")
+                delay = base_delay * (2 ** retries) + random.uniform(0, 1)
+                logging.warning(f"Transient LLM error ({e}), retrying in {delay:.2f}s...")
                 time.sleep(delay)
                 retries += 1
             except APIError as e:

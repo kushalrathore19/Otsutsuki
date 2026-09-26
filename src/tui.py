@@ -11,12 +11,13 @@ import json
 import time
 
 class ChatMessage(Static):
-    def __init__(self, role: str, content, role_label=None, is_error=False, **kwargs):
+    def __init__(self, role: str, content, role_label=None, is_error=False, markup=False, **kwargs):
         super().__init__(**kwargs)
         self.msg_role = role
         self.content = content
         self.role_label = role_label
         self.is_error = is_error
+        self.use_markup = markup
         self.body_static = None
 
     def compose(self) -> ComposeResult:
@@ -43,7 +44,9 @@ class ChatMessage(Static):
                         self.body_static = Static(body)
                         yield self.body_static
             else:
-                if isinstance(self.content, str):
+                if getattr(self, "use_markup", False) and isinstance(self.content, str):
+                    yield Static(self.content, markup=True)
+                elif isinstance(self.content, str):
                     yield Markdown(str(self.content))
                 else:
                     yield Static(self.content)
@@ -71,6 +74,11 @@ class MissionControl(App):
         height: 1;
         background: $boost;
         color: $text;
+        padding: 0 1;
+    }
+    #sys_status {
+        height: 1;
+        color: $text-muted;
         padding: 0 1;
     }
     #input_hint {
@@ -154,6 +162,7 @@ class MissionControl(App):
         yield VerticalScroll(id="transcript")
         with Vertical(id="bottom_bar"):
             yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
+            yield Static("", id="sys_status", markup=True)
             yield Static("Enter to send", id="input_hint")
             yield Static("❯ ", id="input_prompt")
             yield Input(id="input_box", placeholder="Type a task, or / for commands")
@@ -175,30 +184,42 @@ class MissionControl(App):
     def update_logs(self):
         transcript = self.query_one("#transcript", VerticalScroll)
         for msg in self.log_queue:
-            if msg.startswith("Model response:"):
-                self.add_block("agent", msg[15:].strip())
-            elif msg.startswith("Executing:"):
-                cmd = msg[10:].strip()
+            msg = msg.strip("\n")
+            clean_msg = msg
+            for p in ["[red]ERROR[/red] ", "[yellow]WARN[/yellow] ", "[dim]INFO[/dim] ", "[dim]DEBUG[/dim] "]:
+                if clean_msg.startswith(p):
+                    clean_msg = clean_msg[len(p):]
+            clean_msg = re.sub(r'^\[[A-Z]+\]\s*', '', clean_msg)
+            
+            if clean_msg.startswith("Model response:"):
+                self.add_block("agent", clean_msg[15:].strip())
+            elif clean_msg.startswith("Executing:"):
+                cmd = clean_msg[10:].strip()
                 summary = f"⏺ Bash: {cmd[:50]}..." if len(cmd) > 50 else f"⏺ Bash: {cmd}"
                 self.last_tool_msg = self.add_block("tool", (summary, f"Command: {cmd}"))
-            elif msg.startswith("Exit Code:") or msg.startswith("Stdout:") or msg.startswith("Stderr:"):
+            elif clean_msg.startswith("Exit Code:") or clean_msg.startswith("Stdout:") or clean_msg.startswith("Stderr:"):
                 if hasattr(self, "last_tool_msg") and self.last_tool_msg:
-                    self.last_tool_msg.append_text(msg)
+                    self.last_tool_msg.append_text(clean_msg)
                 else:
-                    self.add_block("agent", msg)
-            elif msg.startswith("Critique failed!") or msg.startswith("Verifier failed"):
-                self.add_block("verification", msg, is_error=True)
-            elif "Task completed successfully!" in msg or "Triggering post-patch self-critique" in msg:
-                self.add_block("verification", msg, is_error=False)
-            elif msg.startswith("--- Iteration") or msg.startswith("Starting"):
-                self.add_block("agent", f"**{msg}**")
-            elif msg.startswith("Nudge injected:") or msg.startswith("Manual Rollback"):
+                    self.add_block("agent", clean_msg)
+            elif clean_msg.startswith("Critique failed!") or clean_msg.startswith("Verifier failed"):
+                self.add_block("verification", clean_msg, is_error=True)
+            elif "Task completed successfully!" in clean_msg or "Triggering post-patch self-critique" in clean_msg:
+                self.add_block("verification", clean_msg, is_error=False)
+            elif clean_msg.startswith("--- Iteration") or clean_msg.startswith("Starting"):
+                self.add_block("agent", f"**{clean_msg}**")
+            elif clean_msg.startswith("Nudge injected:") or clean_msg.startswith("Manual Rollback"):
                 pass 
             else:
-                is_err = "error" in msg.lower() or "failed" in msg.lower()
-                self.add_block("agent", msg, is_error=is_err)
+                if "ERROR" in msg or "WARN" in msg:
+                    self.add_block("agent", msg, is_error=True, markup=True)
+                else:
+                    try:
+                        self.query_one("#sys_status", Static).update(msg)
+                    except:
+                        pass
                 
-            if "patch -p0 < /tmp/patch.diff" in msg and os.path.exists("/tmp/patch.diff"):
+            if "patch -p0 < /tmp/patch.diff" in clean_msg and os.path.exists("/tmp/patch.diff"):
                 with open("/tmp/patch.diff", "r") as f:
                     self.add_block("diff", f.read())
                     
@@ -213,12 +234,12 @@ class MissionControl(App):
         cost = (tokens / 1_000_000) * 0.20
         self.query_one("#status_bar", Static).update(f"Role: {self.current_role} | Iteration: {iterations} | Tokens: {tokens} | Cost: ${cost:.6f}")
 
-    def add_block(self, role, content, is_error=False):
+    def add_block(self, role, content, is_error=False, markup=False):
         label = None
         if self.orchestrator.config.multi_agent and role not in ["user", "verification", "diff"]:
             label = self.current_role
             
-        msg = ChatMessage(role, content, role_label=label, is_error=is_error)
+        msg = ChatMessage(role, content, role_label=label, is_error=is_error, markup=markup)
         self.query_one("#transcript", VerticalScroll).mount(msg)
         return msg
 

@@ -78,3 +78,11 @@
 {"timestamp": 1790458499.399456, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790458500.770154, "event": "critique_fired", "decision": "pass"}
 {"timestamp": 1790458500.770997, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790458845.3462138, "event": "task_started", "task": "do it"}
+{"timestamp": 1790458845.3470678, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790458845.347636, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790458845.3478222, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790458845.3498409, "event": "task_started", "task": "do it"}
+{"timestamp": 1790458845.3504682, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790458845.350872, "event": "critique_skipped"}
+{"timestamp": 1790458845.351041, "event": "run_completed", "state": "partial"}
