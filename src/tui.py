@@ -61,17 +61,34 @@ class MissionControl(App):
         height: 1fr;
         overflow-y: auto;
     }
-    #status_bar {
+    #bottom_bar {
         dock: bottom;
+        height: auto;
+        border-top: solid $primary;
+        background: $panel;
+    }
+    #status_bar {
         height: 1;
         background: $boost;
         color: $text;
         padding: 0 1;
     }
+    #input_hint {
+        height: 1;
+        color: $text-muted;
+        text-style: italic;
+        padding: 0 1;
+    }
     #input_box {
-        dock: bottom;
         width: 100%;
+        background: $surface;
         border: none;
+        padding: 0 1;
+    }
+    #input_prompt {
+        height: 1;
+        color: $success;
+        padding: 0 1;
     }
     .chat-msg {
         margin: 1 2;
@@ -107,13 +124,6 @@ class MissionControl(App):
         color: $warning;
         margin-bottom: 1;
     }
-    #input_hint {
-        dock: bottom;
-        height: 1;
-        color: $text-muted;
-        text-style: italic;
-        padding: 0 1;
-    }
     """
     
     BINDINGS = [
@@ -142,13 +152,14 @@ class MissionControl(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield VerticalScroll(id="transcript")
-        yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
-        yield Static("Enter to send · Shift+Enter for newline", id="input_hint")
-        
-        ta = TextArea(id="input_box", show_line_numbers=False)
-        ta.styles.height = "auto"
-        ta.styles.max_height = "30%"
-        yield ta
+        with Vertical(id="bottom_bar"):
+            yield Static("Role: Single Agent | Iteration: 0 | Tokens: 0 | Cost: $0.00", id="status_bar")
+            yield Static("Enter to send · Shift+Enter for newline", id="input_hint")
+            yield Static("❯ ", id="input_prompt")
+            ta = TextArea(id="input_box", show_line_numbers=False)
+            ta.styles.height = "auto"
+            ta.styles.max_height = "30%"
+            yield ta
         
     def on_mount(self):
         self.set_interval(0.1, self.update_logs)
