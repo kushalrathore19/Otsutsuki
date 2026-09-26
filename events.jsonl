@@ -76,3 +76,5 @@
 {"timestamp": 1790458486.0660899, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790458487.3523421, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790458499.399456, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790458500.770154, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790458500.770997, "event": "run_completed", "state": "partial"}

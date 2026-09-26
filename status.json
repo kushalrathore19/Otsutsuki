@@ -43,9 +43,23 @@
       "command": "printf 'success'",
       "timestamp": 1790458488.683139,
       "exit_code": 0
+    },
+    {
+      "iteration": 8,
+      "command": "printf 'success\n' > hello.txt",
+      "timestamp": 1790458499.485235,
+      "exit_code": 0
     }
   ],
   "rollback_count": 5,
-  "state": "running",
-  "tokens": 10019
+  "state": "partial",
+  "tokens": 10019,
+  "critique_events": [
+    {
+      "iteration": 8,
+      "action": "fire",
+      "decision": "pass",
+      "reason": "The diff correctly updates hello.txt to contain only the word \"success\", satisfying the task requirement. No obvious bugs or violations are present."
+    }
+  ]
 }
