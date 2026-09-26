@@ -15,7 +15,7 @@ class ChatMessage(Static):
     def __init__(self, role: str, content, role_label=None, is_error=False, markup=False, **kwargs):
         super().__init__(**kwargs)
         self.msg_role = role
-        self.content = content
+        self.msg_content = content
         self.role_label = role_label
         self.is_error = is_error
         self.use_markup = markup
@@ -32,11 +32,11 @@ class ChatMessage(Static):
                 
             if self.msg_role == "tool" or self.msg_role == "diff":
                 title = "⏺ Tool Call" if self.msg_role == "tool" else "📄 Patch/Diff"
-                if isinstance(self.content, tuple):
-                    title = self.content[0]
-                    body = self.content[1]
+                if isinstance(self.msg_content, tuple):
+                    title = self.msg_content[0]
+                    body = self.msg_content[1]
                 else:
-                    body = self.content
+                    body = self.msg_content
                     
                 with Collapsible(title=title, collapsed=True):
                     if self.msg_role == "diff":
@@ -45,12 +45,12 @@ class ChatMessage(Static):
                         self.body_static = Static(body)
                         yield self.body_static
             else:
-                if getattr(self, "use_markup", False) and isinstance(self.content, str):
-                    yield Static(self.content, markup=True)
-                elif isinstance(self.content, str):
-                    yield Markdown(str(self.content))
+                if getattr(self, "use_markup", False) and isinstance(self.msg_content, str):
+                    yield Static(self.msg_content, markup=True)
+                elif isinstance(self.msg_content, str):
+                    yield Markdown(str(self.msg_content))
                 else:
-                    yield Static(self.content)
+                    yield Static(self.msg_content)
 
     def append_text(self, text):
         if self.body_static:
