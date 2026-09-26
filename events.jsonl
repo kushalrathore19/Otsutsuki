@@ -220,3 +220,5 @@
 {"timestamp": 1790464756.7334132, "event": "run_completed", "state": "partial"}
 {"timestamp": 1790465019.166888, "event": "task_started", "task": "/ls"}
 {"timestamp": 1790465021.2268941, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790465021.3535879, "event": "critique_skipped"}
+{"timestamp": 1790465021.8395488, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
