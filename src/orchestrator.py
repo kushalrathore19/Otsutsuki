@@ -25,6 +25,7 @@ EOF
 patch -p0 < /tmp/patch.diff
 
 Never attempt to overwrite files inline or use custom editors.
+When inspecting a file before writing a patch, use `cat -n <file>` (not plain `cat`) so you have accurate line numbers for the unified diff. Patches with incorrect line numbers will fail to apply and waste an iteration.
 
 After you have completed the requested changes, you MUST explicitly verify them using a bash command (for example, `cat hello.txt` to verify contents).
 Once verified and successful, you MUST output the exact tag: <status>TASK_COMPLETE</status>
@@ -44,6 +45,72 @@ class Orchestrator:
         self.evidence.archive()
         self.evidence = Evidence(self.repo_root)
         self.nudge_queue = []
+        
+    def localize(self, task: str) -> str:
+        import re
+        import ast
+        terms = set()
+        for m in re.findall(r'"([^"]+)"|\'([^\']+)\'', task):
+            terms.add(m[0] or m[1])
+        terms.update(re.findall(r'\b[\w\./\-]+\.\w+\b', task))
+        terms.update(re.findall(r'\b[a-z]+(?:_[a-z0-9]+)+\b', task))
+        terms.update(re.findall(r'\b[A-Z][a-zA-Z0-9]+\b', task))
+        
+        candidates = {}
+        for term in terms:
+            if len(term) < 4: continue
+            try:
+                res = subprocess.run(
+                    ["grep", "-rn", "--exclude-dir=.git", "--exclude-dir=__pycache__", "--exclude-dir=node_modules", term, self.repo_root],
+                    capture_output=True, text=True, timeout=5
+                )
+                for line in res.stdout.splitlines():
+                    parts = line.split(":", 2)
+                    if len(parts) >= 3:
+                        fp, lineno = parts[0], int(parts[1])
+                        if not os.path.exists(fp) or not os.path.isfile(fp): continue
+                        candidates.setdefault(fp, []).append((lineno, term))
+            except Exception:
+                pass
+                
+        if not candidates:
+            return "No existing code matched — this appears to require new file(s)."
+            
+        results = []
+        for fp, matches in sorted(candidates.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
+            symbol = "Unknown"
+            matches = sorted(matches, key=lambda x: x[0])
+            first_ln = matches[0][0]
+            line_range = f"Line {first_ln}"
+            if fp.endswith('.py'):
+                try:
+                    with open(fp, "r") as f:
+                        source = f.read()
+                    tree = ast.parse(source)
+                    for node in ast.walk(tree):
+                        if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+                            if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
+                                for lineno, _ in matches:
+                                    if node.lineno <= lineno <= node.end_lineno:
+                                        symbol = node.name
+                                        line_range = f"Lines {node.lineno}-{node.end_lineno}"
+                                        break
+                except Exception:
+                    pass
+            rel_fp = os.path.relpath(fp, self.repo_root)
+            snippet_lines = []
+            try:
+                with open(fp, "r") as f:
+                    lines = f.readlines()
+                start = max(0, first_ln - 2)
+                end = min(len(lines), first_ln + 2)
+                snippet_lines = [l.rstrip() for l in lines[start:end]]
+            except:
+                pass
+            snippet_text = "\n  ".join(snippet_lines)
+            results.append(f"- {rel_fp}: {symbol} ({line_range})\n  Snippet:\n  {snippet_text}")
+            
+        return "Likely relevant locations based on static analysis:\n" + "\n".join(results) + "\nVerify these yourself before assuming they're correct — this is a starting point, not ground truth."
         
     def _run_reviewer(self, diff_output: str):
         prompt = """You are a Code Reviewer. Review the following diff and provide ONLY non-blocking suggestions for improvement (code smell, missing docstrings, naming conventions, etc.). Do NOT reject the code, just provide plain text notes. If there is nothing to note, reply with 'No notes.'"""
@@ -132,9 +199,10 @@ class Orchestrator:
             except Exception as e:
                 logging.info(f"Error parsing agent_style.json: {e}")
                 
+        localization_summary = self.localize(task)
         self.context = ContextManager([
             {"role": "system", "content": system_content},
-            {"role": "user", "content": task}
+            {"role": "user", "content": localization_summary + "\n\nTask:\n" + task}
         ])
         
         tools = [{"type": "function", "function": {"name": "run_bash", "description": "Execute a bash command in the repository root.", "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The bash command to execute"}}, "required": ["command"]}}}]
@@ -143,6 +211,29 @@ class Orchestrator:
         is_retry = False
         surgical_injected = False
         finalize_injected = False
+        self.same_failure_count = 0
+        
+        def handle_failure(failure_summary, cmd_context):
+            self.same_failure_count += 1
+            if self.same_failure_count == 1:
+                guidance = "Please fix the error and try again."
+            elif self.same_failure_count == 2:
+                guidance = "This is your second failed attempt at this specific issue. Do NOT repeat the same fix with minor variations — identify a fundamentally different approach to solve this."
+            else:
+                critique_prompt = f"The current approach has failed {self.same_failure_count} times: {cmd_context}. Is the overall approach wrong? Suggest a different strategy or confirm the approach is sound but execution needs to be more careful."
+                critique_resp = self.llm.step([{"role": "user", "content": critique_prompt}], [])
+                guidance = f"This approach has repeatedly failed. Analysis:\n{critique_resp.content}\nAdjust your strategy accordingly."
+            
+            full_summary = f"{failure_summary}\n{guidance}"
+            
+            if self.same_failure_count >= 3:
+                self.context.messages = [
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": localization_summary + "\n\nTask:\n" + task},
+                    {"role": "user", "content": f"Prior attempts consolidated summary:\n{full_summary}"}
+                ]
+            else:
+                self.context.prune_and_note(full_summary)
         
         while iteration < self.config.iteration_cap:
             while self.nudge_queue:
@@ -226,12 +317,26 @@ class Orchestrator:
                     if result['stderr']: logging.info(f"Stderr:\n{result['stderr'][:500]}")
                     
                     critique_failed = False
+                    syntax_failed = False
                     if exit_code == 0:
                         if is_modifying:
                             diff_output = subprocess.run("git diff", shell=True, cwd=cwd, capture_output=True, text=True).stdout
-                            changed_files = [line for line in diff_output.splitlines() if line.startswith("diff --git")]
-                            num_files = len(changed_files)
-                            changed_lines = len([line for line in diff_output.splitlines() if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---"))])
+                            changed_files = [line.split(" b/")[-1] for line in diff_output.splitlines() if line.startswith("diff --git")]
+                            for cf in changed_files:
+                                if cf.endswith(".py") and os.path.exists(os.path.join(cwd, cf)):
+                                    res = subprocess.run(f"python -m py_compile {cf}", shell=True, cwd=cwd, capture_output=True, text=True)
+                                    if res.returncode != 0:
+                                        logging.info(f"Syntax pre-check failed on {cf}")
+                                        self.rollback(cwd=cwd)
+                                        failure_summary = f"Attempt applied successfully but introduced a SyntaxError in {cf}:\n{res.stderr}"
+                                        handle_failure(failure_summary, f"SyntaxError in {cf}")
+                                        syntax_failed = True
+                                        critique_failed = True
+                                        break
+                                        
+                            if not syntax_failed:
+                                num_files = len(changed_files)
+                                changed_lines = len([line for line in diff_output.splitlines() if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---"))])
                             
                             if num_files > 1 or changed_lines > 15 or is_retry:
                                 logging.info("Triggering post-patch self-critique...")
@@ -256,8 +361,9 @@ class Orchestrator:
                                 self.evidence.status["critique_events"].append({"iteration": iteration, "action": "skip", "reason": f"num_files={num_files}, changed_lines={changed_lines}, is_retry={is_retry}"})
                                 self.evidence.write_status()
                         
-                        if not critique_failed:
+                        if not critique_failed and not syntax_failed:
                             is_retry = False
+                            self.same_failure_count = 0
                             self.context.append({"role": "tool", "tool_call_id": tool_call.id, "name": "run_bash", "content": "Command succeeded.\n" + result["stdout"][-500:]})
                         else:
                             is_retry = True
@@ -267,8 +373,8 @@ class Orchestrator:
                         if is_modifying:
                             self.rollback(cwd=cwd)
                         distilled_msg = self.distill_logs(exit_code, result["stdout"], result["stderr"])
-                        failure_summary = f"Attempt failed when running `{cmd}`.\n{distilled_msg}\nPlease fix the error and try again."
-                        self.context.prune_and_note(failure_summary)
+                        failure_summary = f"Attempt failed when running `{cmd}`.\n{distilled_msg}"
+                        handle_failure(failure_summary, f"Command `{cmd}` failed")
                         
             except HarnessError as e:
                 logging.error(f"Harness error encountered: {e}")
@@ -277,8 +383,8 @@ class Orchestrator:
                     self.rollback(cwd=cwd)
                 except Exception as rb_e:
                     logging.error(f"Fatal rollback error after harness error: {rb_e}")
-                failure_summary = f"Internal system error occurred:\n{e}\nPlease try an alternative approach or fix the error."
-                self.context.prune_and_note(failure_summary)
+                failure_summary = f"Internal system error occurred:\n{e}"
+                handle_failure(failure_summary, f"HarnessError: {e}")
                 
         return outcome, iteration
 
