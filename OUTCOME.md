@@ -1,6 +1,6 @@
 # Run Outcome
 
-**Status:** complete
+**Status:** rolled_back
 **Iterations:** 4 / 8
 **Rollbacks:** 1
 
@@ -11,16 +11,6 @@
 @@ -0,0 +1 @@
 +success
 EOF
-patch -p0 < /tmp/patch.diff
-cat hello.txt
-` (Exit: 1)
-- Iteration 2: `cat << 'EOF' > /tmp/patch.diff
---- /dev/null
-+++ hello.txt
-@@ -0,0 +1 @@
-+success
-EOF
-patch -p0 < /tmp/patch.diff
-cat hello.txt
-` (Exit: 0)
-- Iteration 3: `ls -R` (Exit: 0)
+patch -p0 < /tmp/patch.diff` (Exit: 0)
+- Iteration 2: `ls -R` (Exit: 0)
+- Iteration 3: `cat hello.txt` (Exit: 0)

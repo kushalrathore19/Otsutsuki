@@ -116,8 +116,37 @@ class Orchestrator:
                 "stderr": str(e)
             }
             
+    def pre_flight_critique(self, task: str) -> dict | None:
+        messages = [
+            {"role": "system", "content": "You are a senior software architect reviewing a coding task. Evaluate the task for viability, complexity, and better alternatives (e.g. using a standard library instead of custom logic). If you find a significantly better or cheaper approach, output a JSON object exactly like this: {'Original_Est_Tokens': 100, 'New_Est_Tokens': 50, 'Complexity': 'Low', 'Recommendation_Reason': 'reason', 'Recommended_Task': 'new task'}. If the original task is perfectly fine and requires no changes, output exactly the string 'PASS'."},
+            {"role": "user", "content": f"Task: {task}"}
+        ]
+        try:
+            response = self.client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=messages
+            )
+            if response.usage:
+                self.status["tokens"] += response.usage.total_tokens
+                self._write_status()
+            content = response.choices[0].message.content or ""
+            if "PASS" in content.upper() and "{" not in content:
+                return None
+            import re
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            return None
+        except Exception:
+            return None
+
     def run_task(self, task: str):
         print(f"Starting task: {task}")
+        
+        critique = self.pre_flight_critique(task)
+        if critique and hasattr(self, 'intercept_callback'):
+            task = self.intercept_callback(critique, task)
+
         
         with open(os.path.join(self.repo_root, "TASK.md"), "w") as f:
             f.write(task)

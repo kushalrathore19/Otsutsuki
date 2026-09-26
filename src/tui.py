@@ -30,6 +30,33 @@ class ConfirmModal(ModalScreen):
         elif event.button.id == "rollback":
             self.dismiss(False)
 
+class InterceptModal(ModalScreen):
+    def __init__(self, critique, **kwargs):
+        super().__init__(**kwargs)
+        self.critique = critique
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="intercept_dialog"):
+            yield Static("🚨 Pre-Flight Interception 🚨", classes="modal_title")
+            matrix_text = (
+                f"A better approach was detected!\n\n"
+                f"Original Est. Tokens: {self.critique.get('Original_Est_Tokens')}\n"
+                f"New Est. Tokens: {self.critique.get('New_Est_Tokens')}\n"
+                f"Complexity: {self.critique.get('Complexity')}\n"
+                f"Reason: {self.critique.get('Recommendation_Reason')}\n\n"
+                f"Suggested Task:\n{self.critique.get('Recommended_Task')}"
+            )
+            yield Static(matrix_text, id="intercept_message")
+            with Horizontal():
+                yield Button("Accept Recommendation", id="accept_rec", variant="success")
+                yield Button("Override & Execute Original", id="override_rec", variant="error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "accept_rec":
+            self.dismiss(self.critique.get('Recommended_Task'))
+        elif event.button.id == "override_rec":
+            self.dismiss(None)
+
 class NudgeModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="nudge_dialog"):
@@ -50,7 +77,7 @@ class MissionControl(App):
     CSS = """
     #left_pane { width: 30%; height: 100%; border-right: solid green; }
     #right_pane { width: 70%; height: 100%; }
-    #dialog, #nudge_dialog {
+    #dialog, #nudge_dialog, #intercept_dialog {
         padding: 1 2;
         border: thick $background 80%;
         background: $surface;
@@ -58,7 +85,7 @@ class MissionControl(App):
         height: 80%;
         align: center middle;
     }
-    #nudge_dialog { height: auto; }
+    #nudge_dialog, #intercept_dialog { height: auto; }
     .diff_container { height: 1fr; overflow-y: auto; margin-bottom: 1; }
     #odometer { padding-left: 2; padding-right: 2; background: $boost; color: $text; }
     """
@@ -75,6 +102,9 @@ class MissionControl(App):
         self.harness_task = task
         self.confirm_event = threading.Event()
         self.confirm_result = False
+        
+        self.intercept_event = threading.Event()
+        self.intercept_result = None
         
         self.log_queue = []
         self.original_stdout = sys.stdout
@@ -150,7 +180,24 @@ class MissionControl(App):
     @work(thread=True)
     def run_orchestrator(self):
         self.orchestrator.confirm_callback = self.ask_confirmation
+        self.orchestrator.intercept_callback = self.ask_intercept
         self.orchestrator.run_task(self.harness_task)
+        
+    def ask_intercept(self, critique, original_task):
+        auto_approve = os.environ.get("AUTO_APPROVE") == "1"
+        if auto_approve:
+            return original_task
+            
+        self.intercept_event.clear()
+        self.call_from_thread(self.show_intercept_modal, critique)
+        self.intercept_event.wait()
+        return self.intercept_result or original_task
+        
+    def show_intercept_modal(self, critique):
+        def check_result(result):
+            self.intercept_result = result
+            self.intercept_event.set()
+        self.push_screen(InterceptModal(critique), check_result)
         
     def ask_confirmation(self):
         auto_approve = os.environ.get("AUTO_APPROVE") == "1"
