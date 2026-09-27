@@ -40,7 +40,10 @@ class LLMClient:
                         seconds = float(match.group(2))
                         delay = (minutes * 60) + seconds + random.uniform(1.0, 10.0)
                 
-                logging.warning(f"Transient LLM error ({e}), retrying in {delay:.2f}s...")
+                if isinstance(e, RateLimitError):
+                    logging.info(f"Groq API token limit reached. Pausing for {delay:.1f}s to replenish tokens (this is normal)...")
+                else:
+                    logging.info(f"Transient connection issue, retrying in {delay:.1f}s...")
                 time.sleep(delay)
                 retries += 1
             except APIError as e:
@@ -109,7 +112,7 @@ class LLMClient:
             model=self.config.model,
             messages=messages,
             tools=tools,
-            max_tokens=1024
+            max_tokens=512
         )
         if response.usage:
             self.usage_tokens += response.usage.total_tokens
