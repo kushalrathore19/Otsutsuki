@@ -559,9 +559,16 @@ def _apply_new_file(patch: FilePatch, resolved: str | None, label: str) -> str:
 
     if os.path.exists(resolved):
         existing, _, err = _read_lines(resolved)
-        if err is None and [_norm_tight(l) for l in existing or []] == [_norm_tight(l) for l in content_lines]:
-            return f"OK: {label} already has the intended content (idempotent skip)."
-        return f"{ERROR_PREFIX}: file '{label}': new-file diff but the file already exists. Read it and emit a modification diff instead."
+        if err is None:
+            if [_norm_tight(l) for l in existing or []] == [_norm_tight(l) for l in content_lines]:
+                return f"OK: {label} already has the intended content (idempotent skip)."
+            if len(existing) <= 1:
+                err = _write_lines(resolved, content_lines, trailing=not no_final_newline)
+                if err:
+                    return f"{ERROR_PREFIX}: file '{label}': {err}."
+                return f"OK: {label} auto-corrected new-file diff into modification and applied ({len(content_lines)} lines)."
+            
+        return f"{ERROR_PREFIX}: '{label}' already exists — you sent a new-file diff. Your IMMEDIATE next command must be `cat -n {label}` to see its current content, then emit a diff with proper unified-diff context lines (using the existing @@ -old_start,old_count +new_start,new_count @@ format) reflecting a MODIFICATION, not a new-file creation. Do not attempt to write this file again without reading it first."
 
     err = _write_lines(resolved, content_lines, trailing=not no_final_newline)
     if err:

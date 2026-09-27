@@ -14,7 +14,7 @@ test:
 	PYTHONPATH=src ./.venv/bin/pytest tests/ -v
 
 clean:
-	rm -f status.json OUTCOME.md TASK.md
+	rm -f status.json OUTCOME.md TASK.md hello.txt
 	rm -f /tmp/*.patch
 	rm -rf __pycache__ src/__pycache__ tests/__pycache__
 
