@@ -19,7 +19,7 @@ class LLMClient:
         
     def _retry_call(self, func, *args, **kwargs):
         retries = 0
-        max_retries = 3
+        max_retries = 20  # Increased heavily to survive shared org-level contention
         base_delay = 2.0
         while True:
             try:
@@ -34,9 +34,11 @@ class LLMClient:
                 
                 delay = base_delay * (2 ** retries) + random.uniform(0, 1)
                 if isinstance(e, RateLimitError):
-                    match = re.search(r"try again in ([\d.]+)s", str(e))
+                    match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", str(e))
                     if match:
-                        delay = float(match.group(1)) + 0.1
+                        minutes = int(match.group(1)) if match.group(1) else 0
+                        seconds = float(match.group(2))
+                        delay = (minutes * 60) + seconds + random.uniform(1.0, 10.0)
                 
                 logging.warning(f"Transient LLM error ({e}), retrying in {delay:.2f}s...")
                 time.sleep(delay)
