@@ -182,6 +182,7 @@ class Orchestrator:
 
         Returns True when the working tree is acceptable.
         """
+        subprocess.run("git add -N .", shell=True, cwd=cwd, capture_output=True)
         diff_output = subprocess.run("git diff", shell=True, cwd=cwd, capture_output=True, text=True).stdout
         changed_files = [line.split(" b/")[-1] for line in diff_output.splitlines() if line.startswith("diff --git")]
         num_files = len(changed_files)
@@ -440,7 +441,7 @@ class Orchestrator:
                 if name == "run_bash" and args is not None:
                     cmd = args.get("command", "")
 
-                    is_modifying = any(kw in cmd for kw in ["patch", ">", "rm ", "touch ", "sed "])
+                    is_modifying = any(kw in cmd for kw in ["patch", ">", "rm ", "touch ", "sed "]) and not ("> /tmp/" in cmd)
                     if is_modifying:
                         self.checkpoint(cwd=cwd)
                     self.scrub_env()
