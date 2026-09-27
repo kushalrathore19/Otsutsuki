@@ -27,7 +27,7 @@ class Config:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, val = line.split("=", 1)
-                        os.environ.setdefault(key.strip(), val.strip().strip("'").strip('"'))
+                        os.environ[key.strip()] = val.strip().strip("'").strip('"')
                         
         harness_yaml_path = os.path.join(repo_root, "harness.yaml")
         if os.path.exists(harness_yaml_path):
