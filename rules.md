@@ -37,13 +37,16 @@ be tuned, but should not be removed without a documented reason.
 
 ## 4. Agent Behavior Rules [ENGINEERING]
 
-1. The model is given **exactly one tool**: `run_bash(command)`. No custom
-   file-edit or search tool.
-2. Every code change **must** be expressed as a unified diff written to
-   `/tmp/*.patch` and applied via the `patch` utility — never an inline
-   file overwrite by the model.
-3. The model navigates the repository itself, using `grep`, `find`, `cat`
-   — the orchestrator does not pre-fetch or summarize the repo for it.
+1. The model is given **exactly three tools**: `run_bash(command)`,
+   `read_file(path, start_line, end_line)` and `apply_patch(diff)`. No
+   custom editor tool beyond the diff applier.
+2. Every code change **must** be expressed as a unified diff applied via
+   `apply_patch` — never an inline shell overwrite, and never a
+   hand-rolled `patch -p0` invocation from `run_bash`.
+3. The model navigates the repository itself: range-based `read_file`
+   for source inspection (minified/binary files are refused by the
+   reader), `grep`/`find` via `run_bash` for search — the orchestrator
+   does not pre-fetch or summarize the repo for it.
 4. Every tool call is a fresh, independent `subprocess.run` — no persistent
    shell session, no hidden state between calls.
 

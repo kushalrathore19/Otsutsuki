@@ -1,29 +1,27 @@
 import os
 import json
+import sys
 import time
 import subprocess
 import logging
 from config import Config
 from llm_client import LLMClient
 from sandbox import run_sandboxed
+from patcher import apply_patch_diff
+from safe_reader import safe_read_file
 from evidence import Evidence
 from audit import AuditLog
 from exceptions import HarnessError, PatchApplyError, RollbackError
 from context_manager import ContextManager
 
-SYSTEM_PROMPT = """You are an AI agent. Tool: `run_bash`.
-To modify/create files, write a unified diff to `/tmp/patch.diff` AND apply with `patch` in ONE command.
-Ex:
-cat << 'EOF' > /tmp/patch.diff
---- /dev/null
-+++ b/file
-@@ -0,0 +1 @@
-+A
-EOF
-patch -p0 < /tmp/patch.diff
+SYSTEM_PROMPT = """You are an autonomous coding agent working inside a git repository. You have three tools.
 
-No custom editors. Use `cat -n <file>` for exact line numbers for patches.
-Verify changes via bash, then output: <status>TASK_COMPLETE</status>"""
+1. `read_file(path, start_line, end_line)` — range-based file reader that prints line numbers. ALWAYS use this instead of cat/head/tail: it rejects minified/binary files, caps output size, and its header reports total_lines. Read in windows (e.g. 1-200) and widen or advance as needed.
+2. `apply_patch(diff)` — applies a unified diff with fuzzy matching: it tolerates whitespace drift and stale line numbers, creates/deletes files, and is idempotent on re-apply. This is the ONLY way to edit files. If it returns 'PATCH_ERROR: ...', re-read the affected range with read_file and regenerate the hunk with exact context lines.
+3. `run_bash(command)` — sandboxed bash (confined to the repository, hard wall-clock timeout, destructive commands blocked). Use it for builds, tests, grep, and git inspection. Never use shell redirects to edit files.
+
+Workflow: read_file the relevant range -> apply_patch with a unified diff (copy context lines exactly from read_file output) -> run_bash to run tests and verify. Keep diffs minimal: one hunk per logical change.
+When the task is verified complete, output: <status>TASK_COMPLETE</status>"""
 
 class Orchestrator:
     def __init__(self, config: Config):
@@ -175,6 +173,57 @@ class Orchestrator:
             distilled = stderr[-500:] if stderr else stdout[-500:]
         return f"Exit code {exit_code}\nDistilled output:\n{distilled}"
 
+    def _post_patch_gate(self, task: str, cwd: str, iteration: int, is_retry: bool, handle_failure) -> bool:
+        """Deterministic post-edit checks shared by run_bash patches and apply_patch.
+
+        Records diff stats, runs py_compile over changed Python files, then
+        fires the conditional self-critique.  On failure it rolls the tree
+        back and reports through ``handle_failure``/prune itself.
+
+        Returns True when the working tree is acceptable.
+        """
+        diff_output = subprocess.run("git diff", shell=True, cwd=cwd, capture_output=True, text=True).stdout
+        changed_files = [line.split(" b/")[-1] for line in diff_output.splitlines() if line.startswith("diff --git")]
+        num_files = len(changed_files)
+        changed_lines = len([line for line in diff_output.splitlines() if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---"))])
+        self.evidence.status["files_changed"] = self.evidence.status.get("files_changed", 0) + num_files
+        self.evidence.write_status()
+
+        for cf in changed_files:
+            if cf.endswith(".py") and os.path.exists(os.path.join(cwd, cf)):
+                res = subprocess.run(f'"{sys.executable}" -m py_compile "{cf}"', shell=True, cwd=cwd, capture_output=True, text=True)
+                if res.returncode != 0:
+                    logging.info(f"Syntax pre-check failed on {cf}")
+                    self.rollback(cwd=cwd)
+                    failure_summary = f"Attempt applied successfully but introduced a SyntaxError in {cf}:\n{res.stderr}"
+                    handle_failure(failure_summary, f"SyntaxError in {cf}")
+                    return False
+
+        if "critique_events" not in self.evidence.status:
+            self.evidence.status["critique_events"] = []
+
+        if num_files > 1 or changed_lines > 15 or is_retry:
+            logging.info("Triggering post-patch self-critique...")
+            critique_result = self.llm.post_patch_critique(task, diff_output)
+            # The critique JSON may come back malformed; coerce before use
+            # so a bad value degrades to a skipped critique, not a crash.
+            decision = str(critique_result.get("decision", "fail")).lower()
+            reason = str(critique_result.get("reason", "No reason provided"))
+            self.audit.log_event("critique_fired", {"decision": decision})
+            self.evidence.status["critique_events"].append({"iteration": iteration, "action": "fire", "decision": decision, "reason": reason})
+            self.evidence.write_status()
+            if decision == "fail":
+                logging.info("Critique failed! Rolling back.")
+                self.rollback(cwd=cwd)
+                failure_summary = f"Attempt applied successfully but self-critique rejected the changes:\n{reason}\nPlease roll back your mental state and try a different approach."
+                self.context.prune_and_note(failure_summary)
+                return False
+        else:
+            self.audit.log_event("critique_skipped")
+            self.evidence.status["critique_events"].append({"iteration": iteration, "action": "skip", "reason": f"num_files={num_files}, changed_lines={changed_lines}, is_retry={is_retry}"})
+            self.evidence.write_status()
+        return True
+
     @property
     def status(self):
         self.evidence.status["tokens"] = self.llm.usage_tokens
@@ -254,7 +303,29 @@ class Orchestrator:
             {"role": "user", "content": localization_summary + "\n\nTask:\n" + task}
         ])
         
-        tools = [{"type": "function", "function": {"name": "run_bash", "description": "Execute a bash command in the repository root.", "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The bash command to execute"}}, "required": ["command"]}}}]
+        tools = [
+            {"type": "function", "function": {
+                "name": "run_bash",
+                "description": "Execute a bash command in the repository root (sandboxed: repo-confined, timeout-enforced, destructive commands blocked).",
+                "parameters": {"type": "object", "properties": {"command": {"type": "string", "description": "The bash command to execute"}}, "required": ["command"]},
+            }},
+            {"type": "function", "function": {
+                "name": "read_file",
+                "description": "Safely read a range of lines from a file, with line numbers. Rejects minified/binary files and enforces output limits. Use this instead of cat.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string", "description": "Repo-relative file path"},
+                    "start_line": {"type": "integer", "description": "1-based first line to read (default 1)"},
+                    "end_line": {"type": "integer", "description": "1-based inclusive last line (at most 400 lines per call)"},
+                }, "required": ["path"]},
+            }},
+            {"type": "function", "function": {
+                "name": "apply_patch",
+                "description": "Apply a unified diff to the repository with fuzzy matching (tolerates whitespace drift and stale line numbers; creates and deletes files). Use this for ALL file edits.",
+                "parameters": {"type": "object", "properties": {
+                    "diff": {"type": "string", "description": "Unified diff text with ---/+++ file headers and @@ hunk headers"},
+                }, "required": ["diff"]},
+            }},
+        ]
         
         outcome = "Failed"
         is_retry = False
@@ -339,15 +410,36 @@ class Orchestrator:
                         self.context.append({"role": "user", "content": "Please continue to verify and output <status>TASK_COMPLETE</status> when done, or use the run_bash tool."})
                     continue
                     
-                tool_call = message.tool_calls[0]
-                if tool_call.function.name == "run_bash":
-                    args = json.loads(tool_call.function.arguments)
+                tool_calls = message.tool_calls
+                tool_call_dicts = [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tool_calls
+                ]
+                self.context.append({"role": "assistant", "content": content, "tool_calls": tool_call_dicts})
+                self.evidence.status["tools_called"] = self.evidence.status.get("tools_called", 0) + len(tool_calls)
+                # The protocol requires a response for every tool_call id;
+                # this loop executes one call per turn and skips the rest.
+                for extra in tool_calls[1:]:
+                    self.context.append({
+                        "role": "tool", "tool_call_id": extra.id, "name": extra.function.name,
+                        "content": "SKIPPED: process one tool call per turn. Re-issue this call in your next message.",
+                    })
+
+                tool_call = tool_calls[0]
+                name = tool_call.function.name
+                try:
+                    args = json.loads(tool_call.function.arguments or "{}")
+                except json.JSONDecodeError as json_err:
+                    args = None
+                    self.context.append({
+                        "role": "tool", "tool_call_id": tool_call.id, "name": name,
+                        "content": f"TOOL_ERROR: arguments were not valid JSON ({json_err}). Resend the call with valid JSON.",
+                    })
+
+                if name == "run_bash" and args is not None:
                     cmd = args.get("command", "")
-                    
-                    tool_call_dict = {"id": tool_call.id, "type": "function", "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments}}
-                    self.context.append({"role": "assistant", "content": content, "tool_calls": [tool_call_dict]})
-                    self.evidence.status["tools_called"] = self.evidence.status.get("tools_called", 0) + 1
-                    
+
                     is_modifying = any(kw in cmd for kw in ["patch", ">", "rm ", "touch ", "sed "])
                     if is_modifying:
                         self.checkpoint(cwd=cwd)
@@ -372,58 +464,19 @@ class Orchestrator:
                     if result['stdout']: logging.info(f"Stdout:\n{result['stdout'][:500]}")
                     if result['stderr']: logging.info(f"Stderr:\n{result['stderr'][:500]}")
                     
-                    critique_failed = False
-                    syntax_failed = False
                     if exit_code == 0:
                         if is_modifying:
-                            diff_output = subprocess.run("git diff", shell=True, cwd=cwd, capture_output=True, text=True).stdout
-                            changed_files = [line.split(" b/")[-1] for line in diff_output.splitlines() if line.startswith("diff --git")]
-                            for cf in changed_files:
-                                if cf.endswith(".py") and os.path.exists(os.path.join(cwd, cf)):
-                                    res = subprocess.run(f"python -m py_compile {cf}", shell=True, cwd=cwd, capture_output=True, text=True)
-                                    if res.returncode != 0:
-                                        logging.info(f"Syntax pre-check failed on {cf}")
-                                        self.rollback(cwd=cwd)
-                                        failure_summary = f"Attempt applied successfully but introduced a SyntaxError in {cf}:\n{res.stderr}"
-                                        handle_failure(failure_summary, f"SyntaxError in {cf}")
-                                        syntax_failed = True
-                                        critique_failed = True
-                                        break
-                                        
-                            if not syntax_failed:
-                                num_files = len(changed_files)
-                                changed_lines = len([line for line in diff_output.splitlines() if (line.startswith("+") and not line.startswith("+++")) or (line.startswith("-") and not line.startswith("---"))])
-                                self.evidence.status["files_changed"] = self.evidence.status.get("files_changed", 0) + num_files
-                            
-                            if num_files > 1 or changed_lines > 15 or is_retry:
-                                logging.info("Triggering post-patch self-critique...")
-                                critique_result = self.llm.post_patch_critique(task, diff_output)
-                                if "critique_events" not in self.evidence.status:
-                                    self.evidence.status["critique_events"] = []
-                                decision = critique_result.get("decision", "fail").lower()
-                                reason = critique_result.get("reason", "No reason provided")
-                                self.audit.log_event("critique_fired", {"decision": decision})
-                                self.evidence.status["critique_events"].append({"iteration": iteration, "action": "fire", "decision": decision, "reason": reason})
-                                self.evidence.write_status()
-                                if decision == "fail":
-                                    critique_failed = True
-                                    logging.info("Critique failed! Rolling back.")
-                                    self.rollback(cwd=cwd)
-                                    failure_summary = f"Attempt applied successfully but self-critique rejected the changes:\n{reason}\nPlease roll back your mental state and try a different approach."
-                                    self.context.prune_and_note(failure_summary)
+                            gate_ok = self._post_patch_gate(task, cwd, iteration, is_retry, handle_failure)
+                            if gate_ok:
+                                is_retry = False
+                                self.same_failure_count = 0
+                                self.context.append({"role": "tool", "tool_call_id": tool_call.id, "name": "run_bash", "content": "Command succeeded.\n" + result["stdout"][-500:]})
                             else:
-                                self.audit.log_event("critique_skipped")
-                                if "critique_events" not in self.evidence.status:
-                                    self.evidence.status["critique_events"] = []
-                                self.evidence.status["critique_events"].append({"iteration": iteration, "action": "skip", "reason": f"num_files={num_files}, changed_lines={changed_lines}, is_retry={is_retry}"})
-                                self.evidence.write_status()
-                        
-                        if not critique_failed and not syntax_failed:
+                                is_retry = True
+                        else:
                             is_retry = False
                             self.same_failure_count = 0
                             self.context.append({"role": "tool", "tool_call_id": tool_call.id, "name": "run_bash", "content": "Command succeeded.\n" + result["stdout"][-500:]})
-                        else:
-                            is_retry = True
                     else:
                         is_retry = True
                         logging.info("Command failed! Pruning context and rolling back...")
@@ -432,6 +485,43 @@ class Orchestrator:
                         distilled_msg = self.distill_logs(exit_code, result["stdout"], result["stderr"])
                         failure_summary = f"Attempt failed when running `{cmd}`.\n{distilled_msg}"
                         handle_failure(failure_summary, f"Command `{cmd}` failed")
+
+                elif name == "read_file" and args is not None:
+                    tool_output = safe_read_file(
+                        args.get("path") or args.get("filepath") or args.get("file"),
+                        start_line=args.get("start_line", 1),
+                        end_line=args.get("end_line"),
+                        repo_root=self.repo_root,
+                    )
+                    logging.info(f"read_file -> {tool_output.splitlines()[0] if tool_output else 'empty'}")
+                    self.context.append({"role": "tool", "tool_call_id": tool_call.id, "name": name, "content": tool_output})
+
+                elif name == "apply_patch" and args is not None:
+                    diff_text = args.get("diff") or args.get("patch") or ""
+                    self.checkpoint(cwd=cwd)
+                    patch_result = apply_patch_diff(diff_text, self.repo_root)
+                    logging.info(f"apply_patch -> {patch_result.splitlines()[0] if patch_result else 'empty'}")
+                    if patch_result.startswith("PATCH_ERROR"):
+                        self.rollback(cwd=cwd)
+                        is_retry = True
+                        handle_failure(f"Patch application failed.\n{patch_result}", "apply_patch failed")
+                    else:
+                        gate_ok = self._post_patch_gate(task, cwd, iteration, is_retry, handle_failure)
+                        if gate_ok:
+                            is_retry = False
+                            self.same_failure_count = 0
+                            self.context.append({"role": "tool", "tool_call_id": tool_call.id, "name": name, "content": patch_result})
+                        else:
+                            is_retry = True
+
+                elif args is None:
+                    pass  # invalid-JSON TOOL_ERROR was already answered above
+
+                else:
+                    self.context.append({
+                        "role": "tool", "tool_call_id": tool_call.id, "name": name,
+                        "content": f"TOOL_ERROR: unknown tool '{name}'. Available tools: run_bash, read_file, apply_patch.",
+                    })
                         
             except HarnessError as e:
                 logging.error(f"Harness error encountered: {e}")
@@ -442,6 +532,16 @@ class Orchestrator:
                     logging.error(f"Fatal rollback error after harness error: {rb_e}")
                 failure_summary = f"Internal system error occurred:\n{e}"
                 handle_failure(failure_summary, f"HarnessError: {e}")
+            except Exception as e:
+                # An autonomous loop must degrade gracefully: log, roll
+                # back, and let the model retry within the iteration cap.
+                logging.exception(f"Unexpected error in agent loop: {e}")
+                is_retry = True
+                try:
+                    self.rollback(cwd=cwd)
+                except Exception as rb_e:
+                    logging.error(f"Fatal rollback error after unexpected error: {rb_e}")
+                handle_failure(f"Internal system error occurred:\n{e}", f"Unexpected error: {e}")
                 
         return outcome, iteration
 

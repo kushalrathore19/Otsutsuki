@@ -7,7 +7,10 @@ class ContextManager:
     def extend(self, messages):
         self.messages.extend(messages)
     def prune_and_note(self, failure_summary):
-        if self.messages and self.messages[-1].get("role") == "tool":
+        # One assistant turn may carry several tool calls (each with a
+        # response), so pop *every* trailing tool message before removing
+        # the assistant turn that requested them.
+        while self.messages and self.messages[-1].get("role") == "tool":
             self.messages.pop()
         if self.messages and self.messages[-1].get("role") == "assistant":
             self.messages.pop()

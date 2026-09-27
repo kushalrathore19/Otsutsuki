@@ -258,3 +258,94 @@
 {"timestamp": 1790468178.8092659, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
 {"timestamp": 1790468179.642978, "event": "critique_fired", "decision": "pass"}
 {"timestamp": 1790468180.205367, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790468180.336999, "event": "critique_skipped"}
+{"timestamp": 1790469565.2455208, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469565.246866, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469565.247466, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790469565.247653, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469565.2491992, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469565.249711, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469565.2502122, "event": "critique_skipped"}
+{"timestamp": 1790469565.250426, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469872.065435, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469872.066924, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469872.0675461, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790469872.0677178, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469872.069542, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469872.070127, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469872.070652, "event": "critique_skipped"}
+{"timestamp": 1790469872.070828, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469928.36036, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469928.361648, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469928.362305, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790469928.3624818, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469928.363999, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469928.364537, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469928.365031, "event": "critique_skipped"}
+{"timestamp": 1790469928.3651998, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469978.1067991, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469978.10802, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469978.108583, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790469978.108751, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790469978.110823, "event": "task_started", "task": "do it"}
+{"timestamp": 1790469978.111438, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790469978.112105, "event": "critique_skipped"}
+{"timestamp": 1790469978.112285, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470072.255463, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470072.256809, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470072.257479, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470072.257685, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470072.2594209, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470072.259926, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470072.260407, "event": "critique_skipped"}
+{"timestamp": 1790470072.260573, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470104.170474, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470104.17169, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470104.172441, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470104.172631, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470104.1744902, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470104.175061, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470104.1755672, "event": "critique_skipped"}
+{"timestamp": 1790470104.175736, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470151.4500139, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470151.451624, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470151.453752, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470151.454032, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470151.4724412, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470151.473397, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470151.4741619, "event": "critique_skipped"}
+{"timestamp": 1790470151.474507, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470207.5207648, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470207.521614, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470207.5221388, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470207.522315, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470207.523734, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470207.524191, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470207.5246809, "event": "critique_skipped"}
+{"timestamp": 1790470207.524841, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470255.385716, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470255.387815, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470255.388565, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470255.3888042, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470255.3904881, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470255.3912761, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470255.391855, "event": "critique_skipped"}
+{"timestamp": 1790470255.392051, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470308.6007528, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470308.602161, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470308.602952, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470308.603144, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470308.605136, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470308.6056042, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470308.606045, "event": "critique_skipped"}
+{"timestamp": 1790470308.606217, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470339.928022, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470339.928931, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470339.929796, "event": "critique_fired", "decision": "pass"}
+{"timestamp": 1790470339.930015, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470339.93194, "event": "task_started", "task": "do it"}
+{"timestamp": 1790470339.9324899, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
+{"timestamp": 1790470339.933297, "event": "critique_skipped"}
+{"timestamp": 1790470339.933525, "event": "run_completed", "state": "partial"}
+{"timestamp": 1790470368.9362419, "event": "task_started", "task": "Create a file named hello.txt containing the word success"}
+{"timestamp": 1790470371.942889, "event": "checkpoint", "cwd": "/Users/kushalrathore/Desktop/Otsutsuki"}
